@@ -1,0 +1,344 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="description" content="CashFlow – A premium salary and expense tracker with real-time currency conversion, visual charts, and PDF reporting." />
+  <title>CashFlow – Salary &amp; Expense Tracker</title>
+
+  <!-- ─── Google Fonts: Inter ──────────────────────────────────── -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link
+    href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap"
+    rel="stylesheet"
+  />
+
+  <!-- ─── Tailwind CSS (CDN) ───────────────────────────────────── -->
+  <script src="https://cdn.tailwindcss.com"></script>
+
+  <!-- ─── Chart.js (CDN – UMD build) ─────────────────────────── -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+
+  <!-- ─── jsPDF (CDN – UMD build) ─────────────────────────────── -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+
+  <!-- ─── Tailwind custom config ───────────────────────────────── -->
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: { inter: ['Inter', 'sans-serif'] },
+        },
+      },
+    };
+  </script>
+
+  <!-- ─── Custom CSS ───────────────────────────────────────────── -->
+  <link rel="stylesheet" href="style.css" />
+</head>
+
+<body class="font-inter min-h-screen text-gray-100 antialiased">
+
+  <!-- ══════════════════════════════════════════════════════════════
+       CRITICAL THRESHOLD WARNING BANNER
+       Hidden by default; shown when balance < 10% of salary.
+       ══════════════════════════════════════════════════════════════ -->
+  <div id="warningBanner" class="warning-banner hidden" role="alert" aria-live="assertive">
+    <div class="banner-inner">
+      <span class="banner-icon">⚠️</span>
+      <div class="banner-body">
+        <p class="banner-title">Critical Balance Alert!</p>
+        <p class="banner-sub">
+          Your remaining balance has dropped below <strong>10%</strong> of your
+          total salary. Please review your spending immediately.
+        </p>
+      </div>
+      <button
+        id="closeBanner"
+        class="banner-close"
+        aria-label="Dismiss alert"
+        title="Dismiss"
+      >✕</button>
+    </div>
+  </div>
+
+  <!-- ══════════════════════════════════════════════════════════════
+       APP WRAPPER
+       ══════════════════════════════════════════════════════════════ -->
+  <div class="app-wrapper">
+
+    <!-- ── HEADER ──────────────────────────────────────────────── -->
+    <header class="app-header">
+      <!-- Brand -->
+      <div class="brand">
+        <div class="brand-icon" aria-hidden="true">💸</div>
+        <div>
+          <h1 class="brand-name">
+            Cash<span class="text-green-400">Flow</span>
+          </h1>
+          <p class="brand-sub">Salary &amp; Expense Intelligence Dashboard</p>
+        </div>
+      </div>
+
+      <!-- Header Controls -->
+      <div class="header-controls">
+        <!-- Currency Toggle -->
+        <div class="currency-wrapper">
+          <span class="currency-label-text">Currency</span>
+          <div
+            id="currencyToggle"
+            class="toggle-track"
+            role="switch"
+            aria-checked="false"
+            tabindex="0"
+            title="Toggle between USD and INR"
+          >
+            <span class="toggle-lbl">USD</span>
+            <div class="toggle-thumb" id="toggleThumb"></div>
+            <span class="toggle-lbl">INR</span>
+          </div>
+          <span id="fxRateLabel" class="fx-rate-label" aria-live="polite"></span>
+        </div>
+
+        <!-- Download PDF -->
+        <button id="downloadPdfBtn" class="btn-pdf" title="Export report as PDF">
+          <!-- Download icon -->
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            class="h-4 w-4 flex-shrink-0"
+            fill="none"
+            viewBox="0 0 24 24"
+            stroke="currentColor"
+            stroke-width="2"
+            aria-hidden="true"
+          >
+            <path stroke-linecap="round" stroke-linejoin="round"
+              d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1
+                 m-4-4l-4 4m0 0l-4-4m4 4V4" />
+          </svg>
+          Download PDF Report
+        </button>
+      </div>
+    </header>
+
+    <!-- ── MAIN GRID ────────────────────────────────────────────── -->
+    <main class="main-grid">
+
+      <!-- ════════════════════════════════════════════════════════
+           LEFT COLUMN – Forms + Ledger
+           ════════════════════════════════════════════════════════ -->
+      <div class="left-col">
+
+        <!-- ── Salary Card ──────────────────────────────────── -->
+        <section class="glass-card" aria-labelledby="salaryHeading">
+          <h2 id="salaryHeading" class="section-title">
+            <span aria-hidden="true">💰</span> Set Your Salary
+          </h2>
+
+          <div class="form-group">
+            <label for="salaryInput" class="form-label">Monthly Salary</label>
+            <div class="input-wrap">
+              <span class="input-pfx" id="salaryPfx" aria-hidden="true">$</span>
+              <input
+                type="number"
+                id="salaryInput"
+                class="form-input pl-8"
+                placeholder="e.g. 5000"
+                min="0"
+                step="0.01"
+                aria-describedby="salaryError"
+              />
+            </div>
+            <p id="salaryError" class="error-msg hidden" role="alert">
+              ⚠ Please enter a valid positive salary.
+            </p>
+          </div>
+
+          <button id="setSalaryBtn" class="btn-primary w-full mt-3">
+            Set Salary
+          </button>
+        </section>
+
+        <!-- ── Add Expense Card ─────────────────────────────── -->
+        <section class="glass-card" aria-labelledby="expenseHeading">
+          <h2 id="expenseHeading" class="section-title">
+            <span aria-hidden="true">➕</span> Add Expense
+          </h2>
+
+          <div class="flex flex-col gap-4">
+            <!-- Expense Name -->
+            <div class="form-group">
+              <label for="expenseNameInput" class="form-label">Expense Name</label>
+              <input
+                type="text"
+                id="expenseNameInput"
+                class="form-input"
+                placeholder="e.g. Netflix, Rent, Groceries…"
+                maxlength="45"
+                aria-describedby="expenseNameError"
+              />
+              <p id="expenseNameError" class="error-msg hidden" role="alert">
+                ⚠ Expense name cannot be empty.
+              </p>
+            </div>
+
+            <!-- Expense Amount -->
+            <div class="form-group">
+              <label for="expenseAmountInput" class="form-label">Amount</label>
+              <div class="input-wrap">
+                <span class="input-pfx" id="expensePfx" aria-hidden="true">$</span>
+                <input
+                  type="number"
+                  id="expenseAmountInput"
+                  class="form-input pl-8"
+                  placeholder="e.g. 150.00"
+                  min="0"
+                  step="0.01"
+                  aria-describedby="expenseAmountError"
+                />
+              </div>
+              <p id="expenseAmountError" class="error-msg hidden" role="alert">
+                ⚠ Please enter a valid positive amount.
+              </p>
+            </div>
+          </div>
+
+          <button id="addExpenseBtn" class="btn-success w-full mt-4">
+            + Add Expense
+          </button>
+        </section>
+
+        <!-- ── Expense Ledger Card ──────────────────────────── -->
+        <section class="glass-card ledger-card" aria-labelledby="ledgerHeading">
+          <h2 id="ledgerHeading" class="section-title">
+            <span aria-hidden="true">🧾</span> Expense Ledger
+            <span id="expenseCount" class="badge-count" aria-live="polite">0 items</span>
+          </h2>
+
+          <!-- Empty-state placeholder -->
+          <div id="emptyState" class="empty-state" aria-label="No expenses yet">
+            <div class="empty-icon" aria-hidden="true">📭</div>
+            <p>No expenses yet.<br />Add one above to get started!</p>
+          </div>
+
+          <!-- Dynamic expense list -->
+          <ul
+            id="expenseList"
+            class="expense-list"
+            aria-label="List of expenses"
+          ></ul>
+        </section>
+
+      </div><!-- /left-col -->
+
+      <!-- ════════════════════════════════════════════════════════
+           RIGHT COLUMN – Summary + Chart + Health
+           ════════════════════════════════════════════════════════ -->
+      <div class="right-col">
+
+        <!-- ── Summary Cards ────────────────────────────────── -->
+        <div class="summary-grid" role="region" aria-label="Financial summary">
+
+          <!-- Salary Card -->
+          <div class="summary-card salary-card">
+            <p class="summary-label">Total Salary</p>
+            <p id="displaySalary" class="summary-value text-blue-400">
+              <span class="cur-sym">$</span><span id="salaryVal">0.00</span>
+            </p>
+          </div>
+
+          <!-- Expenses Card -->
+          <div class="summary-card expense-card">
+            <p class="summary-label">Total Expenses</p>
+            <p id="displayExpenses" class="summary-value text-rose-400">
+              <span class="cur-sym">$</span><span id="expensesVal">0.00</span>
+            </p>
+          </div>
+
+          <!-- Balance Card -->
+          <div class="summary-card balance-card">
+            <p class="summary-label">Remaining Balance</p>
+            <p id="displayBalance" class="summary-value text-green-400">
+              <span class="cur-sym">$</span><span id="balanceVal">0.00</span>
+            </p>
+          </div>
+        </div>
+
+        <!-- ── Equation Bar ──────────────────────────────────── -->
+        <div class="equation-bar" role="math" aria-label="Balance equation">
+          <span class="eq-term">
+            <span class="eq-lbl">Salary</span>
+            <span id="eqSalary"   class="eq-val text-blue-300">$0.00</span>
+          </span>
+          <span class="eq-op" aria-hidden="true">−</span>
+          <span class="eq-term">
+            <span class="eq-lbl">Expenses</span>
+            <span id="eqExpenses" class="eq-val text-rose-300">$0.00</span>
+          </span>
+          <span class="eq-op" aria-hidden="true">=</span>
+          <span class="eq-term">
+            <span class="eq-lbl">Balance</span>
+            <span id="eqBalance"  class="eq-val text-green-300 font-bold">$0.00</span>
+          </span>
+        </div>
+
+        <!-- ── Chart Card ────────────────────────────────────── -->
+        <section class="glass-card chart-card" aria-labelledby="chartHeading">
+          <h2 id="chartHeading" class="section-title">
+            <span aria-hidden="true">📊</span> Spending Breakdown
+          </h2>
+
+          <!-- Canvas wrapper (position:relative for overlay) -->
+          <div class="chart-wrap">
+            <canvas id="expenseChart" aria-label="Spending breakdown doughnut chart"></canvas>
+            <!-- Overlay shown when no salary has been set -->
+            <div id="chartOverlay" class="chart-overlay" aria-hidden="false">
+              <div class="overlay-icon" aria-hidden="true">📉</div>
+              <p>Set a salary to visualize your spending</p>
+            </div>
+          </div>
+
+          <!-- Custom legend (shown once chart renders) -->
+          <div id="chartLegend" class="chart-legend hidden" aria-label="Chart legend">
+            <div class="legend-item">
+              <span class="legend-dot bg-rose-400" aria-hidden="true"></span>
+              <span>Expenses:&nbsp;<strong id="legendExpenses">$0.00</strong></span>
+            </div>
+            <div class="legend-item">
+              <span class="legend-dot bg-green-400" aria-hidden="true"></span>
+              <span>Balance:&nbsp;<strong id="legendBalance">$0.00</strong></span>
+            </div>
+          </div>
+        </section>
+
+        <!-- ── Financial Health Bar ──────────────────────────── -->
+        <section class="glass-card" aria-labelledby="healthHeading">
+          <h2 id="healthHeading" class="section-title mb-3">
+            <span aria-hidden="true">💪</span> Financial Health
+          </h2>
+          <div
+            class="health-track"
+            role="progressbar"
+            aria-valuemin="0"
+            aria-valuemax="100"
+            aria-valuenow="100"
+            aria-label="Financial health percentage"
+          >
+            <div id="healthBar" class="health-fill" style="width:100%;"></div>
+          </div>
+          <div class="health-labels">
+            <span>0%</span>
+            <span id="healthLabel" class="health-status text-green-400">Excellent (100%)</span>
+            <span>100%</span>
+          </div>
+        </section>
+
+      </div><!-- /right-col -->
+
+    </main><!-- /main-grid -->
+  </div><!-- /app-wrapper -->
+
+  <!-- ─── Application Script ───────────────────────────────────── -->
+  <script src="script.js"></script>
+</body>
+</html>
